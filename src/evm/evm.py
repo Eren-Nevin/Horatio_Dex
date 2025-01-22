@@ -9,6 +9,7 @@ from web3 import AsyncWeb3
 MAINNET_ETH_USDT_1PP_POOL = '0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b'
 BASE_ETH_USDC_1PP_POOL = '0xb4CB800910B228ED3d0834cF79D697127BBB00e5'
 AERODOME_ETH_USDC_1PP_POOL = '0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59'
+QUICKSWAP_ETH_USDC_POOL = '0x55CAaBB0d2b704FD0eF8192A7E35D8837e678207'
 
 def sqrtX96ToPrice(sqrtx96, decimals0, decimals1, token0IsInput = True):
     ratio = (sqrtx96 / (2 ** 96)) ** 2
@@ -25,8 +26,9 @@ async def main():
 
     load_dotenv('src/evm/.env')
 
-    PROVIDER_WS_RPC = os.getenv('BASE_MAINNET_WS')
     # PROVIDER_WS_RPC = os.getenv('ETH_MAINNET_WS')
+    # PROVIDER_WS_RPC = os.getenv('BASE_MAINNET_WS')
+    PROVIDER_WS_RPC = os.getenv('POLYGON_MAINNET_WS')
 
     w3 = AsyncWeb3(AsyncWeb3.WebSocketProvider(PROVIDER_WS_RPC))
 
@@ -36,7 +38,8 @@ async def main():
 
 
         # pool_address = AsyncWeb3.to_checksum_address(MAINNET_ETH_USDT_1PP_POOL)  # Example: USDC/ETH Pool
-        pool_address = AsyncWeb3.to_checksum_address(AERODOME_ETH_USDC_1PP_POOL)  # Example: USDC/ETH Pool
+        # pool_address = AsyncWeb3.to_checksum_address(AERODOME_ETH_USDC_1PP_POOL)  # Example: USDC/ETH Pool
+        pool_address = AsyncWeb3.to_checksum_address(QUICKSWAP_ETH_USDC_POOL)  # Example: USDC/ETH Pool
 
         pool_abi = [
             {
@@ -74,7 +77,15 @@ async def main():
                 print("New Swap event:")
                 event_data = pool_contract.events.Swap().process_log(result)
                 swap_details = dict(**event_data['args'])
-                swap_details['price'] = sqrtX96ToPrice(swap_details['sqrtPriceX96'], 18, 6)
+                # TODO: Fix the price calculation based on whether token0 is input or not
+                # TODO: Read token decimals from their contract
+                eth_is_input_0 = abs(swap_details['amount0']) > abs(swap_details['amount1'])
+                eth_amount = swap_details['amount0'] if eth_is_input_0 else swap_details['amount1']
+                bought_eth = eth_amount > 0
+                if bought_eth:
+                    swap_details['price'] = sqrtX96ToPrice(swap_details['sqrtPriceX96'], 18, 6, True)
+                else:
+                    swap_details['price'] = sqrtX96ToPrice(swap_details['sqrtPriceX96'], 6, 18, False)
                 pprint(swap_details)
 
         await read_subs()
